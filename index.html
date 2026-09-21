@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mic test recorder</title>
+<style>
+  :root {
+    --bg: #eef1ee;
+    --surface: #ffffff;
+    --ink: #1b2422;
+    --muted: #5d6b67;
+    --line: #cfd8d3;
+    --accent: #1f6f6b;
+    --on-accent: #ffffff;
+    --rec: #c93c3c;
+    --ok: #1f7a45;
+    --bad: #b3261e;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121816;
+      --surface: #1b2421;
+      --ink: #e7eeea;
+      --muted: #9aaba5;
+      --line: #2d3a36;
+      --accent: #5bc0b8;
+      --on-accent: #0d1513;
+      --rec: #e26a6a;
+      --ok: #6fd49a;
+      --bad: #f2867f;
+    }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 24px 18px 40px; }
+  h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lede { margin: 0 0 22px; color: var(--muted); }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 16px; }
+  .block { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .block:last-child { border-bottom: 0; }
+  .block h2 { font-size: 1rem; margin: 0 0 8px; }
+
+  .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .checks li { display: flex; justify-content: space-between; gap: 12px; }
+  .yes { color: var(--ok); font-weight: 600; }
+  .no  { color: var(--bad); font-weight: 600; }
+
+  button {
+    font: inherit; font-weight: 600;
+    min-height: 48px; padding: 0 18px;
+    border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  button.record  { background: var(--rec); color: #fff; border-color: var(--rec); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  .full { width: 100%; }
+  .row { display: flex; gap: 10px; }
+  .row button { flex: 1; }
+
+  label.field { display: block; font-weight: 600; margin-bottom: 6px; }
+  select {
+    width: 100%; min-height: 48px; padding: 0 12px;
+    font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .count { margin: 6px 0 0; color: var(--muted); font-size: 0.9rem; }
+
+  fieldset { border: 0; margin: 0; padding: 0; }
+  legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
+  .toggle { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+  .toggle input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+  .toggle span small { display: block; color: var(--muted); font-size: 0.85rem; line-height: 1.3; }
+
+  .meter {
+    position: relative; height: 34px; border-radius: 8px;
+    background: var(--bg); border: 1px solid var(--line); overflow: hidden;
+  }
+  .meter .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); }
+  .meter .fill.hot { background: var(--rec); }
+  .meter .peak { position: absolute; top: 0; bottom: 0; width: 3px; left: 0; background: var(--ink); opacity: 0.7; }
+  .meter::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(90deg, transparent 0 7px, var(--surface) 7px 9px);
+  }
+  .meter-text { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); font-size: 0.9rem; }
+
+  .note { margin: 10px 0 0; font-size: 0.92rem; color: var(--muted); }
+  .msg { margin: 10px 0 0; font-size: 0.95rem; }
+  .msg.bad { color: var(--bad); }
+  .msg.good { color: var(--ok); }
+  #timer { font-variant-numeric: tabular-nums; font-weight: 600; margin: 10px 0 0; min-height: 1.5em; }
+  audio { width: 100%; margin-top: 10px; }
+  a.download {
+    display: inline-flex; align-items: center; min-height: 48px; margin-top: 10px;
+    padding: 0 18px; border-radius: 10px; font-weight: 600; text-decoration: none;
+    background: var(--accent); color: var(--on-accent);
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Mic test recorder</h1>
+  <p class="lede">Checks whether this browser lets you choose which microphone to record with.</p>
+
+  <div class="panel">
+    <section class="block" aria-labelledby="h-check">
+      <h2 id="h-check">Browser check</h2>
+      <ul class="checks">
+        <li><span>Secure page (needed for mic)</span><span id="c-secure" class="no">Checking</span></li>
+        <li><span>Microphone access available</span><span id="c-api" class="no">Checking</span></li>
+        <li><span>Recording available</span><span id="c-rec" class="no">Checking</span></li>
+      </ul>
+    </section>
+
+    <section class="block" aria-labelledby="h-mic">
+      <h2 id="h-mic">Choose microphone</h2>
+      <button id="enable" class="primary full">Find microphones</button>
+      <p id="msg" class="msg" role="status" aria-live="polite"></p>
+
+      <label class="field" for="mic" style="margin-top:14px">Microphone</label>
+      <select id="mic" disabled>
+        <option value="">Tap "Find microphones" first</option>
+      </select>
+      <p id="count" class="count"></p>
+    </section>
+
+    <section class="block" aria-labelledby="h-filters">
+      <fieldset>
+        <legend id="h-filters">Filters</legend>
+        <label class="toggle">
+          <input type="checkbox" id="ns" checked>
+          <span>Noise suppression<small>Tries to cut steady noise like traffic</small></span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="ec">
+          <span>Echo cancellation<small>Only useful if sound plays from the speaker while recording</small></span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="agc">
+          <span>Auto volume<small>Lifts quiet speech but can also lift background noise</small></span>
+        </label>
+      </fieldset>
+    </section>
+
+    <section class="block" aria-labelledby="h-rec">
+      <h2 id="h-rec">Test and record</h2>
+      <div class="meter" aria-hidden="true">
+        <div class="fill" id="bar"></div>
+        <div class="peak" id="peak"></div>
+      </div>
+      <div class="meter-text"><span id="meterState">Meter is off</span><span id="db"></span></div>
+      <p id="using" class="note"></p>
+
+      <div class="row" style="margin-top:14px">
+        <button id="test">Test mic</button>
+        <button id="rec" class="record">Record</button>
+      </div>
+      <p id="timer" aria-live="off"></p>
+
+      <audio id="player" controls hidden></audio>
+      <a id="dl" class="download" hidden>Download recording</a>
+    </section>
+  </div>
+
+  <p class="note">Everything stays on this phone. Nothing is uploaded.</p>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  var mic = $("mic"), enableBtn = $("enable"), msg = $("msg"), count = $("count");
+  var ns = $("ns"), ec = $("ec"), agc = $("agc");
+  var bar = $("bar"), peakEl = $("peak"), meterState = $("meterState"), dbText = $("db");
+  var usingEl = $("using"), testBtn = $("test"), recBtn = $("rec"), timerEl = $("timer");
+  var player = $("player"), dl = $("dl");
+
+  var stream = null, audioCtx = null, analyser = null, raf = null;
+  var recorder = null, chunks = [], recording = false, timerId = null, startedAt = 0, lastUrl = null;
+  var peakDb = -60, peakHoldUntil = 0;
+
+  var hasApi = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var hasRecorder = typeof window.MediaRecorder !== "undefined";
+  var secure = window.isSecureContext === true;
+
+  function setCheck(id, ok) {
+    var el = $(id);
+    el.textContent = ok ? "Yes" : "No";
+    el.className = ok ? "yes" : "no";
+  }
+  setCheck("c-secure", secure);
+  setCheck("c-api", hasApi);
+  setCheck("c-rec", hasRecorder);
+
+  function say(text, kind) {
+    msg.textContent = text || "";
+    msg.className = "msg" + (kind ? " " + kind : "");
+  }
+
+  function explain(e) {
+    if (!secure || !hasApi) {
+      return "Chrome is not treating this page as secure, so it hides the microphone. Try opening the file from a different place (for example the Chrome downloads list), or host it as a link.";
+    }
+    switch (e && e.name) {
+      case "NotAllowedError":
+        return "Microphone permission is blocked. Tap the settings icon beside the address bar, allow Microphone, then try again.";
+      case "NotFoundError":
+        return "No microphone was found.";
+      case "NotReadableError":
+        return "The microphone is busy. Close other apps that use it (camera, calls) and try again.";
+      case "OverconstrainedError":
+        return "That microphone is no longer available. Tap Find microphones to refresh the list.";
+      default:
+        return (e && e.name ? e.name + ": " : "") + (e && e.message ? e.message : "Something went wrong.");
+    }
+  }
+
+  /* ---------- device list ---------- */
+  function refreshDevices() {
+    return navigator.mediaDevices.enumerateDevices().then(function (devs) {
+      var inputs = devs.filter(function (d) { return d.kind === "audioinput"; });
+      var previous = mic.value;
+      mic.innerHTML = "";
+      inputs.forEach(function (d, i) {
+        var o = document.createElement("option");
+        o.value = d.deviceId;
+        o.textContent = d.label || ("Microphone " + (i + 1));
+        mic.appendChild(o);
+      });
+      if (!inputs.length) {
+        var none = document.createElement("option");
+        none.value = "";
+        none.textContent = "No microphones listed";
+        mic.appendChild(none);
+      }
+      var stillThere = inputs.some(function (d) { return d.deviceId === previous; });
+      if (stillThere) mic.value = previous;
+      mic.disabled = !inputs.length;
+
+      if (inputs.length === 0) {
+        count.textContent = "0 microphones listed.";
+      } else if (inputs.length === 1) {
+        count.textContent = "1 microphone listed. On Android a plugged-in clip-on mic often replaces the built-in one automatically. Plug it in, tap Test mic, and speak into the clip-on.";
+      } else {
+        count.textContent = inputs.length + " microphones listed. Pick one, tap Test mic, and watch the meter.";
+      }
+    });
+  }
+
+  function enableMics() {
+    if (!hasApi) { say(explain(), "bad"); return; }
+    say("Asking for permission…");
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      s.getTracks().forEach(function (t) { t.stop(); });
+      return refreshDevices();
+    }).then(function () {
+      say("Microphones found. Choose one below.", "good");
+    }).catch(function (e) {
+      say(explain(e), "bad");
+    });
+  }
+
+  if (hasApi && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", function () {
+      if (mic.disabled && !stream) return;
+      refreshDevices().then(function () { say("The list of microphones changed.", "good"); });
+    });
+  }
+
+  /* ---------- stream + meter ---------- */
+  function stopStream() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    if (stream) { stream.getTracks().forEach(function (t) { t.onended = null; t.stop(); }); stream = null; }
+    if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
+    analyser = null;
+    bar.style.width = "0"; bar.classList.remove("hot");
+    peakEl.style.left = "0";
+    meterState.textContent = "Meter is off";
+    dbText.textContent = "";
+    testBtn.textContent = "Test mic";
+  }
+
+  function describeSettings(track) {
+    var s = track.getSettings ? track.getSettings() : {};
+    function word(v) { return v === undefined ? "not reported" : (v ? "on" : "off"); }
+    return "Using: " + (track.label || "unknown microphone") +
+      ". Noise suppression " + word(s.noiseSuppression) +
+      ", echo cancellation " + word(s.echoCancellation) +
+      ", auto volume " + word(s.autoGainControl) + ".";
+  }
+
+  function startStream() {
+    stopStream();
+    var audio = {
+      echoCancellation: ec.checked,
+      noiseSuppression: ns.checked,
+      autoGainControl: agc.checked
+    };
+    if (mic.value) audio.deviceId = { exact: mic.value };
+
+    return navigator.mediaDevices.getUserMedia({ audio: audio }).then(function (s) {
+      stream = s;
+      var track = s.getAudioTracks()[0];
+      usingEl.textContent = describeSettings(track);
+      track.onended = function () {
+        say("The microphone was disconnected.", "bad");
+        if (recording && recorder) { recorder.stop(); } else { stopStream(); }
+        refreshDevices();
+      };
+
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new Ctx();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var src = audioCtx.createMediaStreamSource(s);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      src.connect(analyser);
+
+      testBtn.textContent = "Stop test";
+      meterState.textContent = "Listening. Speak or tap the mic.";
+      peakDb = -60;
+      drawMeter();
+
+      // Labels only appear after permission, so refresh the list once.
+      var needsLabels = Array.prototype.some.call(mic.options, function (o) { return !o.value || /^Microphone \d+$/.test(o.textContent); });
+      if (needsLabels) {
+        var chosen = track.getSettings && track.getSettings().deviceId;
+        return refreshDevices().then(function () { if (chosen) mic.value = chosen; });
+      }
+    });
+  }
+
+  function drawMeter() {
+    if (!analyser) return;
+    var buf = new Float32Array(analyser.fftSize);
+    (function loop() {
+      if (!analyser) return;
+      analyser.getFloatTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      var rms = Math.sqrt(sum / buf.length);
+      var db = 20 * Math.log10(rms || 1e-8);
+      var pct = Math.max(0, Math.min(100, (db + 60) / 60 * 100));
+      bar.style.width = pct + "%";
+      bar.classList.toggle("hot", db > -6);
+
+      var now = performance.now();
+      if (db > peakDb || now > peakHoldUntil) {
+        if (db > peakDb) peakHoldUntil = now + 900;
+        peakDb = db > peakDb ? db : Math.max(db, peakDb - 0.6);
+      }
+      var peakPct = Math.max(0, Math.min(100, (peakDb + 60) / 60 * 100));
+      peakEl.style.left = "calc(" + peakPct + "% - 3px)";
+      dbText.textContent = db > -59 ? Math.round(db) + " dB" : "silent";
+      raf = requestAnimationFrame(loop);
+    })();
+  }
+
+  /* ---------- controls ---------- */
+  function toggleTest() {
+    if (recording) return;
+    if (stream) { stopStream(); return; }
+    startStream().catch(function (e) { stopStream(); say(explain(e), "bad"); });
+  }
+
+  function onSettingChange() {
+    if (recording) return;
+    if (stream) startStream().catch(function (e) { stopStream(); say(explain(e), "bad"); });
+  }
+
+  function pickMime() {
+    var types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+    for (var i = 0; i < types.length; i++) {
+      if (MediaRecorder.isTypeSupported(types[i])) return types[i];
+    }
+    return "";
+  }
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+  function setRecordingUI(on) {
+    recording = on;
+    recBtn.textContent = on ? "Stop recording" : "Record";
+    testBtn.disabled = on;
+    mic.disabled = on || mic.options.length === 0 || !mic.options[0].value;
+    ns.disabled = ec.disabled = agc.disabled = on;
+  }
+
+  function toggleRecord() {
+    if (recording) { recorder.stop(); return; }
+    if (!hasRecorder) { say("This browser cannot record audio.", "bad"); return; }
+    var ready = stream ? Promise.resolve() : startStream();
+    ready.then(function () {
+      chunks = [];
+      var mime = pickMime();
+      recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recorder.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
+      recorder.onstop = finishRecording;
+      recorder.start(500);
+      startedAt = Date.now();
+      setRecordingUI(true);
+      player.hidden = true; dl.hidden = true;
+      timerEl.textContent = "Recording 0:00";
+      timerId = setInterval(function () {
+        var s = Math.floor((Date.now() - startedAt) / 1000);
+        timerEl.textContent = "Recording " + Math.floor(s / 60) + ":" + pad(s % 60);
+      }, 250);
+    }).catch(function (e) {
+      stopStream();
+      say(explain(e), "bad");
+    });
+  }
+
+  function finishRecording() {
+    clearInterval(timerId);
+    var type = (recorder && recorder.mimeType) || "audio/webm";
+    var blob = new Blob(chunks, { type: type });
+    var secs = Math.round((Date.now() - startedAt) / 1000);
+    stopStream();
+    setRecordingUI(false);
+    timerEl.textContent = "Saved " + Math.floor(secs / 60) + ":" + pad(secs % 60) + " recording";
+    if (!blob.size) { say("Nothing was recorded.", "bad"); return; }
+
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = URL.createObjectURL(blob);
+    player.src = lastUrl;
+    player.hidden = false;
+
+    var ext = /mp4/.test(type) ? "m4a" : /ogg/.test(type) ? "ogg" : "webm";
+    var d = new Date();
+    dl.href = lastUrl;
+    dl.download = "recording-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) +
+      "-" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + "." + ext;
+    dl.hidden = false;
+  }
+
+  enableBtn.addEventListener("click", enableMics);
+  testBtn.addEventListener("click", toggleTest);
+  recBtn.addEventListener("click", toggleRecord);
+  mic.addEventListener("change", onSettingChange);
+  ns.addEventListener("change", onSettingChange);
+  ec.addEventListener("change", onSettingChange);
+  agc.addEventListener("change", onSettingChange);
+
+  if (!hasApi) {
+    say("Chrome is hiding the microphone from this page. See the Browser check above.", "bad");
+    enableBtn.disabled = true;
+    testBtn.disabled = true;
+    recBtn.disabled = true;
+  } else if (!hasRecorder) {
+    recBtn.disabled = true;
+  }
+})();
+</script>
+</body>
+</html>
